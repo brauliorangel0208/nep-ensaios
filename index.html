@@ -21,11 +21,7 @@
       align-items: center; justify-content: center; gap: 16px;
       font-family: sans-serif; z-index: 9999;
     }
-    .spinner {
-      width: 48px; height: 48px; border: 4px solid #1E3A5F;
-      border-top-color: #005BAA; border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
+    .spinner { width: 48px; height: 48px; border: 4px solid #1E3A5F; border-top-color: #005BAA; border-radius: 50%; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
   </style>
 </head>
@@ -192,6 +188,7 @@ function App() {
   const [servicosSalvos, setServicosSalvos] = useState([]);
   const [showServicos, setShowServicos] = useState(false);
   const [salvandoServico, setSalvandoServico] = useState(false);
+  const [scanandoArt, setScanandoArt] = useState(false);
 
   const fileRef = useRef();
   const filePorItemRef = useRef();
@@ -263,7 +260,7 @@ function App() {
     try {
       const b64 = url.split(",")[1];
       const mediaType = url.split(";")[0].split(":")[1];
-      const resp = await fetch("https://api.anthropic.com/v1/messages",{
+      const resp = await fetch("/api/claude",{
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({
@@ -290,6 +287,52 @@ Preencha apenas os campos visíveis. Retorne SOMENTE o JSON, nada mais.`}
     } finally {
       setPlacaCarregando(p=>({...p,[eqIdx]:false}));
     }
+  }
+
+  // Escanear ART via IA e preencher campos automaticamente
+  async function scanArt(arquivo) {
+    setScanandoArt(true);
+    try {
+      const url = await toBase64(arquivo);
+      setArtArq({nome: arquivo.name, url});
+      const b64 = url.split(",")[1];
+      const mediaType = url.split(";")[0].split(":")[1];
+      if (!mediaType.startsWith("image")) { setScanandoArt(false); return; }
+      const resp = await fetch("/api/claude", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({
+          model: "claude-sonnet-4-20250514",
+          max_tokens: 800,
+          messages: [{role: "user", content: [
+            {type: "image", source: {type: "base64", media_type: mediaType, data: b64}},
+            {type: "text", text: `Esta é uma imagem de uma ART (Anotação de Responsabilidade Técnica) brasileira. Extraia os dados e retorne APENAS JSON válido sem markdown:
+{"numeroArt":"","responsavel":"","crea":"","local":"","solicitante":""}
+Regras:
+- numeroArt: número da ART (ex: MA20251006343 ou só os dígitos)
+- responsavel: nome completo do engenheiro/responsável técnico
+- crea: número do CREA do responsável (ex: 1115988662-MA)
+- local: endereço/localização da obra ou serviço
+- solicitante: nome do proprietário, cliente ou contratante
+Retorne SOMENTE o JSON, nada mais.`}
+          ]}]
+        })
+      });
+      const data = await resp.json();
+      const txt = data.content?.[0]?.text || "{}";
+      let campos = {};
+      try { campos = JSON.parse(txt.replace(/```json|```/g, "")); } catch(e) {}
+      setDados(p => {
+        const novo = {...p};
+        if (campos.numeroArt) novo.numeroArt = campos.numeroArt;
+        if (campos.responsavel) novo.responsavel = campos.responsavel;
+        if (campos.crea) novo.crea = campos.crea;
+        if (campos.local) novo.local = campos.local;
+        if (campos.solicitante) novo.solicitante = campos.solicitante;
+        return novo;
+      });
+    } catch(e) { /* silencia erro, ART já foi anexada */ }
+    finally { setScanandoArt(false); }
   }
 
   function atualizarDadosPlaca(eqIdx, campo, valor) {
@@ -1383,8 +1426,12 @@ function SecRel({num,titulo,cor,children}){
 }
 
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(React.createElement(App));
+try {
+  const root = ReactDOM.createRoot(document.getElementById('root'));
+  root.render(React.createElement(App));
+} catch(e) {
+  document.getElementById('root').innerHTML = '<div style="color:red;padding:20px">Erro: ' + e.message + '</div>';
+}
 document.getElementById('loading').style.display = 'none';
 
 if ('serviceWorker' in navigator) {
