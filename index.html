@@ -166,6 +166,8 @@ function App() {
   const [salvandoServico, setSalvandoServico] = useState(false);
   const [scanandoArt, setScanandoArt] = useState(false);
   const [artIaStatus, setArtIaStatus] = useState(null); // null | "ok" | "pdf" | "erro"
+  const [autoSalvoEm, setAutoSalvoEm] = useState(null);
+  const autoSaveTimerRef = useRef(null);
 
   const fileRef = useRef();
   const filePorItemRef = useRef();
@@ -195,6 +197,46 @@ function App() {
     }
     carregarServicos();
   }, []);
+
+    // AUTOSAVE: salva rascunho a cada 2s de inatividade
+      useEffect(() => {
+          if (tela !== "ensaios") return;
+              clearTimeout(autoSaveTimerRef.current);
+                  autoSaveTimerRef.current = setTimeout(() => {
+                        try {
+                                const snap = { dados, artArq, docsExtras, equipamentos, fotos, fotosPorItem,
+                                          valores, checks, obsMap, acaoesRecomendadas, placas, _autoSalvo:true, _ts:Date.now() };
+                                                  localStorage.setItem("nep-rascunho", JSON.stringify(snap));
+                                                          setAutoSalvoEm(new Date().toLocaleTimeString("pt-BR"));
+                                                                } catch(e) {}
+                                                                    }, 2000);
+                                                                      }, [dados, equipamentos, valores, checks, obsMap, fotos, fotosPorItem, placas, acaoesRecomendadas, artArq, docsExtras, tela]);
+
+                                                                        // Recuperar rascunho ao entrar nos ensaios
+                                                                          useEffect(() => {
+                                                                              if (tela !== "ensaios") return;
+                                                                                  try {
+                                                                                        const raw = localStorage.getItem("nep-rascunho");
+                                                                                              if (!raw) return;
+                                                                                                    const snap = JSON.parse(raw);
+                                                                                                          if (!snap._autoSalvo) return;
+                                                                                                                if ((Date.now() - snap._ts) / 60000 > 480) { localStorage.removeItem("nep-rascunho"); return; }
+                                                                                                                      const temDados = (snap.equipamentos && snap.equipamentos.length > 0) || (snap.valores && Object.keys(snap.valores).length > 0);
+                                                                                                                            if (!temDados) return;
+                                                                                                                                  const hora = new Date(snap._ts).toLocaleTimeString("pt-BR");
+                                                                                                                                        if (confirm("Rascunho salvo as " + hora + ". Recuperar dados do ensaio anterior?")) {
+                                                                                                                                                if (snap.equipamentos) setEquipamentos(snap.equipamentos);
+                                                                                                                                                        if (snap.valores) setValores(snap.valores);
+                                                                                                                                                                if (snap.checks) setChecks(snap.checks);
+                                                                                                                                                                        if (snap.obsMap) setObsMap(snap.obsMap);
+                                                                                                                                                                                if (snap.fotos) setFotos(snap.fotos);
+                                                                                                                                                                                        if (snap.fotosPorItem) setFotosPorItem(snap.fotosPorItem);
+                                                                                                                                                                                                if (snap.acaoesRecomendadas) setAcaoesRecomendadas(snap.acaoesRecomendadas);
+                                                                                                                                                                                                        if (snap.placas) setPlacas(snap.placas);
+                                                                                                                                                                                                              }
+                                                                                                                                                                                                                    localStorage.removeItem("nep-rascunho");
+                                                                                                                                                                                                                        } catch(e) {}
+                                                                                                                                                                                                                          }, [tela]);
 
   function upd(k,v){ setDados(p=>({...p,[k]:v})); }
   const fk = (ei,id) => `${ei}-${id}`;
@@ -836,7 +878,7 @@ Retorne SOMENTE o JSON, nada mais.`;
         </div>
       </div>
 
-      {/* Modal adicionar equipamento */}
+      {autoSalvoEm && (<div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",background:"rgba(34,197,94,0.12)",border:"1px solid rgba(34,197,94,0.4)",borderRadius:20,padding:"5px 18px",fontSize:11,color:"#22C55E",zIndex:999,pointerEvents:"none",whiteSpace:"nowrap"}}>&#10003; salvo automaticamente as {autoSalvoEm}</div>)}{/* Modal adicionar equipamento */}
       {showAddEquip&&(
         <div style={{position:"fixed",inset:0,background:"#000000CC",zIndex:50,display:"flex",alignItems:"flex-end"}}>
           <div style={{background:BG2,borderRadius:"20px 20px 0 0",padding:20,width:"100%",boxSizing:"border-box",maxHeight:"80vh",overflowY:"auto"}}>
