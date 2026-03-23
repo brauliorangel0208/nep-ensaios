@@ -12,6 +12,7 @@
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
+
 const { useState, useRef, useEffect } = React;
 
 // ─── LOGO NEP (base64) ────────────────────────────────────────────────────────
@@ -220,7 +221,22 @@ function App() {
   function toBase64(file) {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => resolve(e.target.result);
+      reader.onload = (e) => {
+        const img = new Image();
+        img.onload = () => {
+          const MAX = 1200;
+          let w = img.width, h = img.height;
+          if (w > MAX || h > MAX) {
+            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+            else { w = Math.round(w * MAX / h); h = MAX; }
+          }
+          const canvas = document.createElement('canvas');
+          canvas.width = w; canvas.height = h;
+          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+          resolve(canvas.toDataURL('image/jpeg', 0.65));
+        };
+        img.src = e.target.result;
+      };
       reader.readAsDataURL(file);
     });
   }
@@ -1020,6 +1036,27 @@ ${rows}
             </div>
           </div>
 
+          {/* SUMÁRIO */}
+          <div style={{pageBreakAfter:'always',pageBreakBefore:'always',padding:'32px 24px 24px',fontFamily:"'Barlow Condensed',sans-serif"}}>
+            <div style={{borderLeft:'4px solid '+NEP_BLUE,paddingLeft:14,marginBottom:28}}>
+              <div style={{fontSize:10,fontWeight:700,color:'#9CA3AF',letterSpacing:3,textTransform:'uppercase',marginBottom:4}}>Índice</div>
+              <h2 style={{fontSize:22,fontWeight:800,margin:0,textTransform:'uppercase',color:NEP_BLUE,letterSpacing:1}}>SUMÁRIO</h2>
+            </div>
+            {[
+              {num:'1',titulo:'OBJETIVO'},
+              {num:'2',titulo:'METODOLOGIA UTILIZADA'},
+              {num:'3',titulo:'DETALHES DA INSTALAÇÃO'},
+              {num:'4',titulo:'DESLIGAMENTO, DETECÇÃO DE TENSÃO E BLOQUEIO (LOTO)'},
+              {num:'5',titulo:'ENSAIOS TÉCNICOS DOS DISPOSITIVOS DA SUBESTAÇÃO'},
+              {num:'6',titulo:'CONCLUSÃO E AÇÕES RECOMENDADAS'},
+            ].map((s,i)=>(
+              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 0',borderBottom:'1px dotted #D1D5DB'}}>
+                <span style={{minWidth:30,fontWeight:800,fontSize:16,color:NEP_BLUE}}>{s.num}.</span>
+                <span style={{flex:1,fontSize:14,fontWeight:600,color:'#1F2937',textTransform:'uppercase',letterSpacing:0.5}}>{s.titulo}</span>
+              </div>
+            ))}
+          </div>
+
           {/* SEÇÕES 1-4 */}
           <SecRel num="1" titulo="OBJETIVO" cor={NEP_BLUE}>
             <p style={{fontSize:13,lineHeight:1.8,color:"#374151"}}>O objetivo deste relatório é documentar as etapas da <b>{tipoSvc?.label?.toLowerCase()}</b> da subestação abrigada de <b>{dados.solicitante||"—"}</b>, conforme NBR 14039/2021 — instalações elétricas de média tensão (1,0 kV a 36,2 kV).</p>
@@ -1414,7 +1451,7 @@ function Sec({label,children}){
 
 function SecRel({num,titulo,cor,children}){
   return(
-    <div style={{marginTop:24,marginBottom:8}}>
+    <div style={{marginTop:24,marginBottom:8,pageBreakBefore:'always'}}>
       <div style={{borderLeft:`4px solid ${cor}`,paddingLeft:12,marginBottom:10}}>
         <div style={{fontSize:10,fontWeight:700,color:"#9CA3AF",letterSpacing:2,textTransform:"uppercase"}}>Seção {num}</div>
         <h2 style={{fontSize:17,fontWeight:800,margin:0,textTransform:"uppercase",color:cor,fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:0.5}}>{titulo}</h2>
@@ -1429,6 +1466,7 @@ try {
 } catch(e) {
   document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;font-family:monospace">Erro: ' + e.message + '</div>';
 }
+
 </script>
 </body>
 </html>
