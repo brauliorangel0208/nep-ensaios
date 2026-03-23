@@ -197,60 +197,10 @@ function App() {
     }
     carregarServicos();
   }, []);
+  useEffect(()=>{if(tela!=="ensaios")return;clearTimeout(autoSaveTimerRef.current);autoSaveTimerRef.current=setTimeout(()=>{salvarLocal(false);},2000);return()=>clearTimeout(autoSaveTimerRef.current);},[dados,equipamentos,valores,checks,obsMap,fotos,fotosPorItem,placas,acoesRecomendadas,artArq,docsExtras,tela]);
 
-  useEffect(()=>{
-    if(tela!=="ensaios") return;
-    clearTimeout(autoSaveTimerRef.current);
-    autoSaveTimerRef.current = setTimeout(()=>{ salvarLocal(false); }, 2000);
-    return ()=>clearTimeout(autoSaveTimerRef.current);
-  },[dados,equipamentos,valores,checks,obsMap,fotos,fotosPorItem,placas,acoesRecomendadas,artArq,docsExtras,tela]);
-
-  function salvarLocal(mostrar=false) {
-    try {
-      const id = dados.art || dados.local || ('s'+Date.now());
-      const snap = {id,_ts:new Date().toISOString(),dados,equipamentos,valores,checks,obsMap,acoesRecomendadas,placas};
-      const lista = JSON.parse(localStorage.getItem('nep-servicos')||'[]');
-      const idx = lista.findIndex(s=>s.id===id);
-      if(idx>=0) lista[idx]=snap; else lista.unshift(snap);
-      localStorage.setItem('nep-servicos', JSON.stringify(lista));
-      setServicosSalvos(lista);
-      setAutoSalvoEm(new Date().toLocaleTimeString('pt-BR'));
-      if(mostrar) alert('✅ Serviço salvo!');
-      return true;
-    } catch(e) { if(mostrar) alert('Erro: '+e.message); return false; }
-  }
-  function carregarArquivoJSON() {
-    const inp = document.createElement('input');
-    inp.type='file'; inp.accept='.json';
-    inp.onchange = ev => {
-      const f = ev.target.files[0]; if(!f) return;
-      const fr = new FileReader();
-      fr.onload = e => {
-        try {
-          const s = JSON.parse(e.target.result);
-          if(s.dados) setDados(s.dados);
-          if(s.equipamentos) setEquipamentos(s.equipamentos);
-          if(s.valores) setValores(s.valores);
-          if(s.checks) setChecks(s.checks);
-          if(s.obsMap) setObsMap(s.obsMap);
-          if(s.acoesRecomendadas) setAcoesRecomendadas(s.acoesRecomendadas);
-          if(s.placas) setPlacas(s.placas);
-          // Salvar no localStorage também
-          const id = (s.dados&&s.dados.art)||(s.dados&&s.dados.local)||f.name;
-          const snap = {...s, id};
-          const lista = JSON.parse(localStorage.getItem('nep-servicos')||'[]');
-          const idx = lista.findIndex(x=>x.id===id);
-          if(idx>=0) lista[idx]=snap; else lista.unshift(snap);
-          localStorage.setItem('nep-servicos', JSON.stringify(lista));
-          setServicosSalvos(lista);
-          setTela('ensaios');
-          alert('✅ Serviço carregado: ' + f.name);
-        } catch(err) { alert('Erro ao ler arquivo: '+err.message); }
-      };
-      fr.readAsText(f);
-    };
-    inp.click();
-  }
+  function salvarLocal(mostrar=false){try{const id=dados.art||dados.local||('s'+Date.now());const snap={id,_ts:new Date().toISOString(),dados,equipamentos,valores,checks,obsMap,acoesRecomendadas,placas};const lista=JSON.parse(localStorage.getItem('nep-servicos')||'[]');const idx=lista.findIndex(s=>s.id===id);if(idx>=0)lista[idx]=snap;else lista.unshift(snap);localStorage.setItem('nep-servicos',JSON.stringify(lista));setServicosSalvos(lista);setAutoSalvoEm(new Date().toLocaleTimeString('pt-BR'));if(mostrar)alert('Servico salvo!');return true;}catch(e){if(mostrar)alert('Erro: '+e.message);return false;}}
+  function carregarArquivoJSON(){const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=ev=>{const f=ev.target.files[0];if(!f)return;const fr=new FileReader();fr.onload=e=>{try{const s=JSON.parse(e.target.result);if(s.dados)setDados(s.dados);if(s.equipamentos)setEquipamentos(s.equipamentos);if(s.valores)setValores(s.valores);if(s.checks)setChecks(s.checks);if(s.obsMap)setObsMap(s.obsMap);if(s.acoesRecomendadas)setAcoesRecomendadas(s.acoesRecomendadas);if(s.placas)setPlacas(s.placas);const id=(s.dados&&s.dados.art)||(s.dados&&s.dados.local)||f.name;const snap={...s,id};const lista=JSON.parse(localStorage.getItem('nep-servicos')||'[]');const idx=lista.findIndex(x=>x.id===id);if(idx>=0)lista[idx]=snap;else lista.unshift(snap);localStorage.setItem('nep-servicos',JSON.stringify(lista));setServicosSalvos(lista);setTela('ensaios');alert('Carregado: '+f.name);}catch(err){alert('Erro: '+err.message);}};fr.readAsText(f);};inp.click();}
   function upd(k,v){ setDados(p=>({...p,[k]:v})); }
   const fk = (ei,id) => `${ei}-${id}`;
   const vk = (ei,id,c) => `${ei}-${id}-${c}`;
@@ -591,15 +541,10 @@ Retorne SOMENTE o JSON, nada mais.`;
         </button>
         {!pronto&&<div style={{textAlign:"center",color:TX2,fontSize:11,marginTop:8}}>Preencha: tipo, ART, responsável e local</div>}
         {servicosSalvos.length>0&&(
-          <React.Fragment>
-      <button onClick={carregarArquivoJSON} style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}>
-        📂 CARREGAR SERVIÇO (.json)
-      </button>
-      <button onClick={()=>setShowServicos(true)}
+          <React.Fragment><button onClick={carregarArquivoJSON} style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}>Carregar Servico (.json)</button><button onClick={()=>setShowServicos(true)}
             style={{width:"100%",background:BG2,border:`1px solid ${BOR}`,borderRadius:12,padding:14,color:TX2,fontSize:13,fontWeight:700,fontFamily:F2,cursor:"pointer",marginTop:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:1}}>
             📂 SERVIÇOS SALVOS ({servicosSalvos.length})
-          </button>
-    </React.Fragment>
+          </button></React.Fragment>
         )}
       </div>
     </div>
@@ -896,7 +841,7 @@ Retorne SOMENTE o JSON, nada mais.`;
         </div>
       </div>
 
-      {autoSalvoEm && <div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",background:"rgba(34,197,94,0.15)",border:"1px solid #22C55E",borderRadius:20,padding:"5px 18px",fontSize:11,color:"#22C55E",zIndex:999,pointerEvents:"none",whiteSpace:"nowrap"}}>✓ salvo às {autoSalvoEm}</div>}
+      {autoSalvoEm&&<div style={{position:"fixed",bottom:16,left:"50%",transform:"translateX(-50%)",background:"rgba(34,197,94,0.15)",border:"1px solid #22C55E",borderRadius:20,padding:"5px 18px",fontSize:11,color:"#22C55E",zIndex:999,pointerEvents:"none",whiteSpace:"nowrap"}}>salvo as {autoSalvoEm}</div>}
       {/* Modal adicionar equipamento */}
       {showAddEquip&&(
         <div style={{position:"fixed",inset:0,background:"#000000CC",zIndex:50,display:"flex",alignItems:"flex-end"}}>
