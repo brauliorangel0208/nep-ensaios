@@ -12,7 +12,6 @@
 <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.23.5/babel.min.js"></script>
 <script type="text/babel" data-presets="react">
-
 const { useState, useRef, useEffect } = React;
 
 // ─── LOGO NEP (base64) ────────────────────────────────────────────────────────
@@ -166,10 +165,9 @@ function App() {
   const [showServicos, setShowServicos] = useState(false);
   const [salvandoServico, setSalvandoServico] = useState(false);
   const [scanandoArt, setScanandoArt] = useState(false);
-  const [artIaStatus, setArtIaStatus] = useState(null); // null | "ok" | "pdf" | "erro"
+  const [artIaStatus, setArtIaStatus] = useState(null);
   const [autoSalvoEm, setAutoSalvoEm] = useState(null);
   const autoSaveTimerRef = useRef(null);
-  const [arquivoNome, setArquivoNome] = useState('');
 
   const fileRef = useRef();
   const filePorItemRef = useRef();
@@ -200,10 +198,59 @@ function App() {
     carregarServicos();
   }, []);
 
-  useEffect(()=>{if(tela!=="ensaios")return;clearTimeout(autoSaveTimerRef.current);autoSaveTimerRef.current=setTimeout(()=>{try{salvarServico();setAutoSalvoEm(new Date().toLocaleTimeString("pt-BR"));}catch(e){}},2000);},[dados,equipamentos,valores,checks,obsMap,fotos,fotosPorItem,placas,acoesRecomendadas,artArq,docsExtras,tela]);
+  useEffect(()=>{
+    if(tela!=="ensaios") return;
+    clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(()=>{ salvarLocal(false); }, 2000);
+    return ()=>clearTimeout(autoSaveTimerRef.current);
+  },[dados,equipamentos,valores,checks,obsMap,fotos,fotosPorItem,placas,acoesRecomendadas,artArq,docsExtras,tela]);
 
-  function salvarArquivoLocal(){const nome=arquivoNome||('nep-'+(dados.local||'servico').replace(/[^a-z0-9]/gi,'-').toLowerCase().slice(0,20)+'-'+new Date().toISOString().slice(0,10)+'.json');const blob=new Blob([JSON.stringify({_v:1,_ts:new Date().toISOString(),_nome:nome,dados,equipamentos,valores,checks,obsMap,acoesRecomendadas,placas},null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download=nome;a.click();URL.revokeObjectURL(url);setArquivoNome(nome);setAutoSalvoEm(new Date().toLocaleTimeString('pt-BR'));salvarServico();}
-  function carregarArquivoLocal(){const inp=document.createElement('input');inp.type='file';inp.accept='.json';inp.onchange=ev=>{const file=ev.target.files[0];if(!file)return;const fr=new FileReader();fr.onload=e=>{try{const s=JSON.parse(e.target.result);if(s.dados)setDados(s.dados);if(s.equipamentos)setEquipamentos(s.equipamentos);if(s.valores)setValores(s.valores);if(s.checks)setChecks(s.checks);if(s.obsMap)setObsMap(s.obsMap);if(s.acoesRecomendadas)setAcoesRecomendadas(s.acoesRecomendadas);if(s.placas)setPlacas(s.placas);if(s._nome)setArquivoNome(s._nome);setTela('ensaios');}catch(err){alert('Erro: '+err.message);}};fr.readAsText(file);};inp.click();}
+  function salvarLocal(mostrar=false) {
+    try {
+      const id = dados.art || dados.local || ('s'+Date.now());
+      const snap = {id,_ts:new Date().toISOString(),dados,equipamentos,valores,checks,obsMap,acoesRecomendadas,placas};
+      const lista = JSON.parse(localStorage.getItem('nep-servicos')||'[]');
+      const idx = lista.findIndex(s=>s.id===id);
+      if(idx>=0) lista[idx]=snap; else lista.unshift(snap);
+      localStorage.setItem('nep-servicos', JSON.stringify(lista));
+      setServicosSalvos(lista);
+      setAutoSalvoEm(new Date().toLocaleTimeString('pt-BR'));
+      if(mostrar) alert('✅ Serviço salvo!');
+      return true;
+    } catch(e) { if(mostrar) alert('Erro: '+e.message); return false; }
+  }
+  function carregarArquivoJSON() {
+    const inp = document.createElement('input');
+    inp.type='file'; inp.accept='.json';
+    inp.onchange = ev => {
+      const f = ev.target.files[0]; if(!f) return;
+      const fr = new FileReader();
+      fr.onload = e => {
+        try {
+          const s = JSON.parse(e.target.result);
+          if(s.dados) setDados(s.dados);
+          if(s.equipamentos) setEquipamentos(s.equipamentos);
+          if(s.valores) setValores(s.valores);
+          if(s.checks) setChecks(s.checks);
+          if(s.obsMap) setObsMap(s.obsMap);
+          if(s.acoesRecomendadas) setAcoesRecomendadas(s.acoesRecomendadas);
+          if(s.placas) setPlacas(s.placas);
+          // Salvar no localStorage também
+          const id = (s.dados&&s.dados.art)||(s.dados&&s.dados.local)||f.name;
+          const snap = {...s, id};
+          const lista = JSON.parse(localStorage.getItem('nep-servicos')||'[]');
+          const idx = lista.findIndex(x=>x.id===id);
+          if(idx>=0) lista[idx]=snap; else lista.unshift(snap);
+          localStorage.setItem('nep-servicos', JSON.stringify(lista));
+          setServicosSalvos(lista);
+          setTela('ensaios');
+          alert('✅ Serviço carregado: ' + f.name);
+        } catch(err) { alert('Erro ao ler arquivo: '+err.message); }
+      };
+      fr.readAsText(f);
+    };
+    inp.click();
+  }
   function upd(k,v){ setDados(p=>({...p,[k]:v})); }
   const fk = (ei,id) => `${ei}-${id}`;
   const vk = (ei,id,c) => `${ei}-${id}-${c}`;
@@ -221,22 +268,7 @@ function App() {
   function toBase64(file) {
     return new Promise((resolve) => {
       const reader = new FileReader();
-      reader.onload = (e) => {
-        const img = new Image();
-        img.onload = () => {
-          const MAX = 1200;
-          let w = img.width, h = img.height;
-          if (w > MAX || h > MAX) {
-            if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-            else { w = Math.round(w * MAX / h); h = MAX; }
-          }
-          const canvas = document.createElement('canvas');
-          canvas.width = w; canvas.height = h;
-          canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-          resolve(canvas.toDataURL('image/jpeg', 0.65));
-        };
-        img.src = e.target.result;
-      };
+      reader.onload = (e) => resolve(e.target.result);
       reader.readAsDataURL(file);
     });
   }
@@ -559,10 +591,15 @@ Retorne SOMENTE o JSON, nada mais.`;
         </button>
         {!pronto&&<div style={{textAlign:"center",color:TX2,fontSize:11,marginTop:8}}>Preencha: tipo, ART, responsável e local</div>}
         {servicosSalvos.length>0&&(
-          <React.Fragment><button onClick={carregarArquivoLocal} style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}>📂 CARREGAR SERVIÇO SALVO (.json)</button><button onClick={()=>setShowServicos(true)}
+          <React.Fragment>
+      <button onClick={carregarArquivoJSON} style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}>
+        📂 CARREGAR SERVIÇO (.json)
+      </button>
+      <button onClick={()=>setShowServicos(true)}
             style={{width:"100%",background:BG2,border:`1px solid ${BOR}`,borderRadius:12,padding:14,color:TX2,fontSize:13,fontWeight:700,fontFamily:F2,cursor:"pointer",marginTop:10,display:"flex",alignItems:"center",justifyContent:"center",gap:8,letterSpacing:1}}>
             📂 SERVIÇOS SALVOS ({servicosSalvos.length})
-          </button></React.Fragment>
+          </button>
+    </React.Fragment>
         )}
       </div>
     </div>
@@ -848,7 +885,7 @@ Retorne SOMENTE o JSON, nada mais.`;
           ＋ ADICIONAR EQUIPAMENTO
         </button>
         <div style={{display:"flex",gap:8,marginBottom:0}}>
-          <button onClick={salvarArquivoLocal} disabled={salvandoServico}
+          <button onClick={()=>salvarLocal(true)} disabled={false}
             style={{flex:1,background:salvandoServico?"#6B7280":"#2563EB",border:"none",borderRadius:12,padding:14,color:"white",fontSize:12,fontWeight:800,fontFamily:F2,cursor:salvandoServico?"not-allowed":"pointer",letterSpacing:1}}>
             {salvandoServico?"⏳ Salvando...":"💾 SALVAR"}
           </button>
@@ -1034,27 +1071,6 @@ ${rows}
                 </div>
               ))}
             </div>
-          </div>
-
-          {/* SUMÁRIO */}
-          <div style={{pageBreakAfter:'always',pageBreakBefore:'always',padding:'32px 24px 24px',fontFamily:"'Barlow Condensed',sans-serif"}}>
-            <div style={{borderLeft:'4px solid '+NEP_BLUE,paddingLeft:14,marginBottom:28}}>
-              <div style={{fontSize:10,fontWeight:700,color:'#9CA3AF',letterSpacing:3,textTransform:'uppercase',marginBottom:4}}>Índice</div>
-              <h2 style={{fontSize:22,fontWeight:800,margin:0,textTransform:'uppercase',color:NEP_BLUE,letterSpacing:1}}>SUMÁRIO</h2>
-            </div>
-            {[
-              {num:'1',titulo:'OBJETIVO'},
-              {num:'2',titulo:'METODOLOGIA UTILIZADA'},
-              {num:'3',titulo:'DETALHES DA INSTALAÇÃO'},
-              {num:'4',titulo:'DESLIGAMENTO, DETECÇÃO DE TENSÃO E BLOQUEIO (LOTO)'},
-              {num:'5',titulo:'ENSAIOS TÉCNICOS DOS DISPOSITIVOS DA SUBESTAÇÃO'},
-              {num:'6',titulo:'CONCLUSÃO E AÇÕES RECOMENDADAS'},
-            ].map((s,i)=>(
-              <div key={i} style={{display:'flex',alignItems:'center',gap:8,padding:'11px 0',borderBottom:'1px dotted #D1D5DB'}}>
-                <span style={{minWidth:30,fontWeight:800,fontSize:16,color:NEP_BLUE}}>{s.num}.</span>
-                <span style={{flex:1,fontSize:14,fontWeight:600,color:'#1F2937',textTransform:'uppercase',letterSpacing:0.5}}>{s.titulo}</span>
-              </div>
-            ))}
           </div>
 
           {/* SEÇÕES 1-4 */}
@@ -1451,7 +1467,7 @@ function Sec({label,children}){
 
 function SecRel({num,titulo,cor,children}){
   return(
-    <div style={{marginTop:24,marginBottom:8,pageBreakBefore:'always'}}>
+    <div style={{marginTop:24,marginBottom:8}}>
       <div style={{borderLeft:`4px solid ${cor}`,paddingLeft:12,marginBottom:10}}>
         <div style={{fontSize:10,fontWeight:700,color:"#9CA3AF",letterSpacing:2,textTransform:"uppercase"}}>Seção {num}</div>
         <h2 style={{fontSize:17,fontWeight:800,margin:0,textTransform:"uppercase",color:cor,fontFamily:"'Barlow Condensed',sans-serif",letterSpacing:0.5}}>{titulo}</h2>
@@ -1466,7 +1482,6 @@ try {
 } catch(e) {
   document.getElementById('root').innerHTML = '<div style="color:red;padding:20px;font-family:monospace">Erro: ' + e.message + '</div>';
 }
-
 </script>
 </body>
 </html>
