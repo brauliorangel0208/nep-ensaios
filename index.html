@@ -67,7 +67,7 @@ function criarEnsaiosEquip(tipo) {
     case "transformador": return [
       { id:"iso_trafo", titulo:"Resistência de Isolação", instrumento:"Megôhmetro (5 kV / 500 V, 1 min)", norma:"NBR 14039 / IEEE C57.12.90",
         instrucoes:["Ensaio 1 — AT→Carcaça: LINE na alta, GUARD na baixa, EARTH na carcaça. 5 kV, 1 min.","Ensaio 2 — BT→Carcaça: LINE na baixa, GUARD na alta, EARTH na carcaça. 500 V, 1 min.","Ensaio 3 — AT→BT: LINE na alta, GUARD na carcaça, EARTH na baixa. 5 kV, 1 min.","Registre temperatura e umidade. Compare com tabela da NBR 14039."],
-        campos:[{id:"at_carca",label:"AT → Carcaça",unit:"MΩ"},{id:"bt_carca",label:"BT → Carcaça",unit:"MΩ"},{id:"at_bt",label:"AT → BT",unit:"MΩ"},{id:"temp",label:"Temp. Amb.",unit:"°C"},{id:"umid",label:"Umid. Rel.",unit:"%"}] },
+        campos:[{id:"at_carca",label:"AT → Carcaça",unit:"MΩ"},{id:"bt_carca",label:"BT → Carcaça",unit:"MΩ"},{id:"temp_iso_trafo",label:"Temp. Amb.",unit:"°C"},{id:"at_bt",label:"AT → BT",unit:"MΩ"},{id:"temp",label:"Temp. Amb.",unit:"°C"},{id:"umid",label:"Umid. Rel.",unit:"%"}] },
       { id:"res_bob_at", titulo:"Resistência de Bobinamento — Alta Tensão", instrumento:"Microôhmetro (10 A)", norma:"NBR 14039 / IEEE C57.12.90",
         instrucoes:["Ensaio 1 — H1H3: conecte entre H1 e H3. Registre em Ω.","Ensaio 2 — H2H1: conecte entre H2 e H1. Registre em Ω.","Ensaio 3 — H2H3: conecte entre H2 e H3. Registre em Ω.","ΔR% é calculado automaticamente abaixo. Aprovado: ΔR < 3%."],
         campos:[{id:"h1h3",label:"H1-H3",unit:"Ω"},{id:"h2h1",label:"H2-H1",unit:"Ω"},{id:"h2h3",label:"H2-H3",unit:"Ω"},{id:"err_at",label:"ΔR% (auto)",unit:"%",auto:true}] },
@@ -76,7 +76,7 @@ function criarEnsaiosEquip(tipo) {
         campos:[{id:"x1x0",label:"X1-X0",unit:"µΩ"},{id:"x2x0",label:"X2-X0",unit:"µΩ"},{id:"x3x0",label:"X3-X0",unit:"µΩ"},{id:"err_bt",label:"ΔR% (auto)",unit:"%",auto:true}] },
       { id:"ttr", titulo:"Relação de Transformação (TTR)", instrumento:"TTR Megabras TR8703 ou similar", norma:"NBR 14039 / IEEE C57.12.90",
         instrucoes:["Calcule o valor teórico: a = Vp/Vs (ex: 13800/220 = 62,727).","Ensaio H3H1/X0X1: conecte H em H3-H1 e X em X0-X1.","Ensaio H1H2/X0X2: conecte H em H1-H2 e X em X0-X2.","Ensaio H2H3/X0X3: conecte H em H2-H3 e X em X0-X3.","Calcule erro % de cada medição. Aprovado: erro < 0,5%."],
-        campos:[{id:"teorico",label:"Relação Teórica (Vp/Vs)",unit:""},{id:"r1",label:"H3H1/X0X1",unit:""},{id:"r2",label:"H1H2/X0X2",unit:""},{id:"r3",label:"H2H3/X0X3",unit:""},{id:"err_ttr",label:"Erro máx. (%)",unit:"%"}] },
+        campos:[{id:"teorico",label:"Relação Teórica (Vp/Vs)",unit:""},{id:"r1",label:"H3H1/X0X1",unit:""},{id:"r2",label:"H1H2/X0X2",unit:""},{id:"r3",label:"H2H3/X0X3",unit:""},{id:"err_ttr",label:"Erro TTR (%)",unit:"%",auto:true}] },
     ];
     case "chave": return [
       { id:"iso_chave_fech", titulo:"Resistência de Isolação — Chave Fechada", instrumento:"Megôhmetro (5 kV, 1 min)", norma:"NBR 14039",
@@ -434,35 +434,84 @@ Retorne SOMENTE o JSON, nada mais.`;
   // Gera resumo automático das ações recomendadas baseado nas observações
   function gerarResumoAcoes() {
     const linhas = [];
-    equipOrdenados().forEach(({eq,i:eqIdx}) => {
-      eq.ensaios.forEach(en => {
-        const obsTxt = obsMap[ok(eqIdx,en.id)];
-        if (obsTxt && obsTxt.trim()) {
-          linhas.push(`• [${eq.nome} — ${en.titulo}]: ${obsTxt.trim()}`);
-        }
-        // Alertas automáticos para mufla
-        if (en.id === "iso_mufla") {
-          const rmin = parseFloat(valores[vk(eqIdx,en.id,"rmin")]||"0");
-          const vals = ["muf_a","muf_b","muf_c"].map(id=>parseFloat(valores[vk(eqIdx,en.id,id)]||"0"));
-          if (rmin > 0 && vals.some(v=>v>0&&v<rmin)) {
-            linhas.push(`⚠️ [${eq.nome}]: Resistência de isolação dos condutores ABAIXO do mínimo exigido pela NBR 14039 (R_mín = ${rmin} MΩ). Verificar condição dos cabos e muflas com urgência.`);
+
+    equipamentos.forEach((eq, ei) => {
+      const def = EQUIPAMENTOS_LISTA.find(e => e.id === eq.equipId) || {};
+      const eqLabel = eq.nome || def.label || eq.equipId;
+      const pk = (campo) => `${eq.equipId}-${ei}-${campo}`;
+
+      // ── Aspectos Gerais: checklist NC → obs automáticas ──────────────────────
+      if (eq.equipId === 'geral') {
+        const ensaiosGeral = obterEnsaios(eq.equipId) || [];
+        ensaiosGeral.forEach(ens => {
+          if (ens.checklist) {
+            ens.checklist.forEach((item, ci) => {
+              const chkKey = `${eq.equipId}-${ei}-${ens.id}-chk-${ci}`;
+              if (checks[chkKey] === 'NC') {
+                linhas.push(`⚠️ Aspecto Geral NC: ${item}`);
+              }
+            });
           }
+        });
+      }
+
+      // ── Resistência de bobinamento: erro fora do limite (≤3% NBR 5356-1) ────
+      const errAT = parseFloat(valores[pk('err_at')]);
+      if (!isNaN(errAT)) {
+        if (errAT > 3) linhas.push(`❌ ${eqLabel} — Erro ΔR% AT (${errAT.toFixed(2)}%) acima do limite (3% NBR 5356-1/IEEE C57.12.90)`);
+        else linhas.push(`✅ ${eqLabel} — Erro ΔR% AT (${errAT.toFixed(2)}%) dentro do limite (≤3%)`);
+      }
+      const errBT = parseFloat(valores[pk('err_bt')]);
+      if (!isNaN(errBT)) {
+        if (errBT > 3) linhas.push(`❌ ${eqLabel} — Erro ΔR% BT (${errBT.toFixed(2)}%) acima do limite (3% NBR 5356-1/IEEE C57.12.90)`);
+        else linhas.push(`✅ ${eqLabel} — Erro ΔR% BT (${errBT.toFixed(2)}%) dentro do limite (≤3%)`);
+      }
+
+      // ── TTR: calcular erro automaticamente e avaliar (≤0,5% IEC 60076-1) ────
+      const rTeo = parseFloat(valores[pk('r_teorica')] || valores[pk('r_teo')]);
+      const r1 = parseFloat(valores[pk('r1')]);
+      const r2 = parseFloat(valores[pk('r2')]);
+      const r3 = parseFloat(valores[pk('r3')]);
+      if (!isNaN(rTeo) && rTeo > 0) {
+        const meds = [r1, r2, r3].filter(v => !isNaN(v) && v > 0);
+        if (meds.length > 0) {
+          const errTTR = Math.max(...meds.map(rv => Math.abs((rv - rTeo) / rTeo) * 100));
+          const errTTRFmt = errTTR.toFixed(3);
+          if (errTTR > 0.5) linhas.push(`❌ ${eqLabel} — Erro TTR (${errTTRFmt}%) acima do limite (0,5% IEC 60076-1/NBR 5356-1)`);
+          else if (meds.length > 0) linhas.push(`✅ ${eqLabel} — Erro TTR (${errTTRFmt}%) dentro do limite (≤0,5%)`);
         }
-        // Alerta ΔR acima do limite
-        if (en.id === "res_bob_at" || en.id === "res_bob_bt") {
-          const campo = en.id === "res_bob_at" ? "err_at" : "err_bt";
-          const dr = parseFloat(valores[vk(eqIdx,en.id,campo)]||"0");
-          if (dr > 3) {
-            const status = dr > 5 ? "INDICAÇÃO DE DEFEITO" : "INVESTIGAR";
-            linhas.push(`⚠️ [${eq.nome} — ${en.titulo}]: ΔR% = ${dr.toFixed(3)}% — ${status}. Avaliar continuidade e conexões internas.`);
+      }
+
+      // ── Isolação: corrigir para 20°C e avaliar limites (IEC 60076-3/NBR 5356-3) ──
+      // Limites mínimos a 20°C: AT-Carcaça ≥ 1000 MΩ, AT-BT ≥ 1000 MΩ, BT-Carcaça ≥ 300 MΩ
+      const tempIso = parseFloat(valores[pk('temp_iso_trafo')] || valores[pk('temp_iso')]);
+      const fatorK = isNaN(tempIso) ? 1 : Math.pow(0.5, (tempIso - 20) / 10);
+      const isoFields = [
+        { key: 'at_carca', label: 'AT-Carcaça', min: 1000 },
+        { key: 'at_bt',    label: 'AT-BT',       min: 1000 },
+        { key: 'bt_carca', label: 'BT-Carcaça',  min: 300  },
+      ];
+      isoFields.forEach(({ key, label, min }) => {
+        const vMed = parseFloat(valores[pk(key)]);
+        if (!isNaN(vMed) && vMed > 0) {
+          const vCorr = vMed / fatorK;
+          const tempInfo = isNaN(tempIso) ? '' : ` (medido ${vMed.toFixed(0)} MΩ a ${tempIso}°C, corrigido para 20°C)`;
+          if (vCorr < min) {
+            linhas.push(`❌ ${eqLabel} — Isolação ${label}: ${vCorr.toFixed(0)} MΩ${tempInfo} abaixo do mínimo (${min} MΩ a 20°C — IEC 60076-3/NBR 5356-3)`);
+          } else {
+            linhas.push(`✅ ${eqLabel} — Isolação ${label}: ${vCorr.toFixed(0)} MΩ${tempInfo} (≥${min} MΩ a 20°C)`);
           }
         }
       });
+
+      // ── Observações manuais do equipamento ──────────────────────────────────
+      const obsEq = obsMap[`${eq.equipId}-${ei}`];
+      if (obsEq && obsEq.trim()) {
+        linhas.push(`📝 ${eqLabel}: ${obsEq.trim()}`);
+      }
     });
-    if (linhas.length === 0) {
-      return "Os ensaios realizados apresentaram resultados dentro dos parâmetros estabelecidos pela norma NBR 14039. Recomenda-se a realização da próxima manutenção preventiva conforme cronograma.";
-    }
-    return linhas.join("\n\n");
+
+    return linhas.filter(Boolean).join('\n');
   }
 
   const pronto = dados.tipoServico && dados.responsavel && dados.local && dados.numeroArt;
@@ -947,7 +996,7 @@ Retorne SOMENTE o JSON, nada mais.`;
 <div style="border-bottom:3px solid #005BAA;padding-bottom:16px;margin-bottom:20px;display:flex;justify-content:space-between;align-items:flex-start">
 <div>
 <img src="data:image/jpeg;base64,${LOGO_B64}" style="height:60px;margin-bottom:6px;display:block"/>
-<div style="font-size:9pt;color:#555">CREA: 000539839-8 | CNPJ: 26.791.755/0001-45<br>Av. Castelo Branco, 401, São Francisco, 65076-090, São Luís (MA)<br>Fone: (98) 99155-4009 | www.nepengenharia.com.br | comercial@nepengenharia.com.br</div>
+<div style="font-size:9pt;color:#555">CREA: 000539839-8 | CNPJ: 26.791.755/0001-45<br>Av. Jerônimo de Albuquerque, 02, Loja 2A, Vinhais, São Luís - MA, 65070-076<br>Fone: (98) 99155-4009 | www.nepengenharia.com.br | comercial@nepengenharia.com.br</div>
 </div>
 <div style="text-align:right"><div style="background:#005BAA;color:white;padding:4px 10px;border-radius:4px;font-size:10pt;font-weight:bold">ART Nº ${dados.numeroArt||"—"}</div><div style="font-size:10pt;color:#555;margin-top:6px">${dataFmt}</div></div>
 </div>
