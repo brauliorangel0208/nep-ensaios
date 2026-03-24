@@ -2,12 +2,8 @@
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8"/>
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"/>
-<meta http-equiv="Pragma" content="no-cache"/>
-<meta http-equiv="Expires" content="0"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>NEP Ensaios</title>
-<meta name="version" content="1774377650205"/>
 <style>*{box-sizing:border-box;margin:0;padding:0}body{background:#060B14}</style>
 </head>
 <body>
@@ -616,50 +612,12 @@ function App() {
       localStorage.setItem('nep-servicos', JSON.stringify(lista));
       setServicosSalvos(lista);
       setAutoSalvoEm(new Date().toLocaleTimeString('pt-BR'));
-      if (mostrar) alert('Servico salvo!');
+      if (mostrar) alert('✅ Serviço salvo!');
       return true;
     } catch (e) {
       if (mostrar) alert('Erro: ' + e.message);
       return false;
     }
-  }
-  function carregarArquivoJSON() {
-    const inp = document.createElement('input');
-    inp.type = 'file';
-    inp.accept = '.json';
-    inp.onchange = ev => {
-      const f = ev.target.files[0];
-      if (!f) return;
-      const fr = new FileReader();
-      fr.onload = e => {
-        try {
-          const s = JSON.parse(e.target.result);
-          if (s.dados) setDados(s.dados);
-          if (s.equipamentos) setEquipamentos(s.equipamentos);
-          if (s.valores) setValores(s.valores);
-          if (s.checks) setChecks(s.checks);
-          if (s.obsMap) setObsMap(s.obsMap);
-          if (s.acoesRecomendadas) setAcoesRecomendadas(s.acoesRecomendadas);
-          if (s.placas) setPlacas(s.placas);
-          const id = s.dados && s.dados.art || s.dados && s.dados.local || f.name;
-          const snap = {
-            ...s,
-            id
-          };
-          const lista = JSON.parse(localStorage.getItem('nep-servicos') || '[]');
-          const idx = lista.findIndex(x => x.id === id);
-          if (idx >= 0) lista[idx] = snap;else lista.unshift(snap);
-          localStorage.setItem('nep-servicos', JSON.stringify(lista));
-          setServicosSalvos(lista);
-          setTela('ensaios');
-          alert('Carregado: ' + f.name);
-        } catch (err) {
-          alert('Erro: ' + err.message);
-        }
-      };
-      fr.readAsText(f);
-    };
-    inp.click();
   }
   function upd(k, v) {
     setDados(p => ({
@@ -1049,52 +1007,34 @@ Retorne SOMENTE o JSON, nada mais.`;
     equipamentos.forEach((eq, ei) => {
       const def = EQUIPAMENTOS_LISTA.find(e => e.id === eq.equipId) || {};
       const eqLabel = eq.nome || def.label || eq.equipId;
-      const pk = campo => `${eq.equipId}-${ei}-${campo}`;
-
-      // ── Aspectos Gerais: checklist NC → obs automáticas ──────────────────────
+      const pk = c => `${eq.equipId}-${ei}-${c}`;
+      // Aspectos Gerais NC
       if (eq.equipId === 'geral') {
-        const ensaiosGeral = obterEnsaios(eq.equipId) || [];
-        ensaiosGeral.forEach(ens => {
-          if (ens.checklist) {
-            ens.checklist.forEach((item, ci) => {
-              const chkKey = `${eq.equipId}-${ei}-${ens.id}-chk-${ci}`;
-              if (checks[chkKey] === 'NC') {
-                linhas.push(`⚠️ Aspecto Geral NC: ${item}`);
-              }
-            });
-          }
+        const ensGeral = obterEnsaios && obterEnsaios(eq.equipId) || [];
+        ensGeral.forEach(ens => {
+          (ens.checklist || []).forEach((item, ci) => {
+            if (checks[`${eq.equipId}-${ei}-${ens.id}-chk-${ci}`] === 'NC') linhas.push('⚠️ Aspecto Geral NC: ' + item);
+          });
         });
       }
-
-      // ── Resistência de bobinamento: erro fora do limite (≤3% NBR 5356-1) ────
+      // Resistência de bobinamento
       const errAT = parseFloat(valores[pk('err_at')]);
-      if (!isNaN(errAT)) {
-        if (errAT > 3) linhas.push(`❌ ${eqLabel} — Erro ΔR% AT (${errAT.toFixed(2)}%) acima do limite (3% NBR 5356-1/IEEE C57.12.90)`);else linhas.push(`✅ ${eqLabel} — Erro ΔR% AT (${errAT.toFixed(2)}%) dentro do limite (≤3%)`);
-      }
+      if (!isNaN(errAT)) linhas.push(errAT > 3 ? '❌ ' + eqLabel + ' — ΔR% AT (' + errAT.toFixed(2) + '%) ACIMA DO LIMITE (3% NBR 5356-1)' : '✅ ' + eqLabel + ' — ΔR% AT (' + errAT.toFixed(2) + '%) OK (≤3%)');
       const errBT = parseFloat(valores[pk('err_bt')]);
-      if (!isNaN(errBT)) {
-        if (errBT > 3) linhas.push(`❌ ${eqLabel} — Erro ΔR% BT (${errBT.toFixed(2)}%) acima do limite (3% NBR 5356-1/IEEE C57.12.90)`);else linhas.push(`✅ ${eqLabel} — Erro ΔR% BT (${errBT.toFixed(2)}%) dentro do limite (≤3%)`);
-      }
-
-      // ── TTR: calcular erro automaticamente e avaliar (≤0,5% IEC 60076-1) ────
+      if (!isNaN(errBT)) linhas.push(errBT > 3 ? '❌ ' + eqLabel + ' — ΔR% BT (' + errBT.toFixed(2) + '%) ACIMA DO LIMITE (3% NBR 5356-1)' : '✅ ' + eqLabel + ' — ΔR% BT (' + errBT.toFixed(2) + '%) OK (≤3%)');
+      // TTR automático
       const rTeo = parseFloat(valores[pk('r_teorica')] || valores[pk('r_teo')]);
-      const r1 = parseFloat(valores[pk('r1')]);
-      const r2 = parseFloat(valores[pk('r2')]);
-      const r3 = parseFloat(valores[pk('r3')]);
       if (!isNaN(rTeo) && rTeo > 0) {
-        const meds = [r1, r2, r3].filter(v => !isNaN(v) && v > 0);
+        const meds = ['r1', 'r2', 'r3'].map(k => parseFloat(valores[pk(k)])).filter(v => !isNaN(v) && v > 0);
         if (meds.length > 0) {
           const errTTR = Math.max(...meds.map(rv => Math.abs((rv - rTeo) / rTeo) * 100));
-          const errTTRFmt = errTTR.toFixed(3);
-          if (errTTR > 0.5) linhas.push(`❌ ${eqLabel} — Erro TTR (${errTTRFmt}%) acima do limite (0,5% IEC 60076-1/NBR 5356-1)`);else if (meds.length > 0) linhas.push(`✅ ${eqLabel} — Erro TTR (${errTTRFmt}%) dentro do limite (≤0,5%)`);
+          linhas.push(errTTR > 0.5 ? '❌ ' + eqLabel + ' — Erro TTR (' + errTTR.toFixed(3) + '%) ACIMA DO LIMITE (0,5% IEC 60076-1)' : '✅ ' + eqLabel + ' — Erro TTR (' + errTTR.toFixed(3) + '%) OK (≤0,5%)');
         }
       }
-
-      // ── Isolação: corrigir para 20°C e avaliar limites (IEC 60076-3/NBR 5356-3) ──
-      // Limites mínimos a 20°C: AT-Carcaça ≥ 1000 MΩ, AT-BT ≥ 1000 MΩ, BT-Carcaça ≥ 300 MΩ
+      // Isolação com correção de temperatura
       const tempIso = parseFloat(valores[pk('temp_iso_trafo')] || valores[pk('temp_iso')]);
-      const fatorK = isNaN(tempIso) ? 1 : Math.pow(0.5, (tempIso - 20) / 10);
-      const isoFields = [{
+      const fK = isNaN(tempIso) ? 1 : Math.pow(0.5, (tempIso - 20) / 10);
+      [{
         key: 'at_carca',
         label: 'AT-Carcaça',
         min: 1000
@@ -1106,29 +1046,20 @@ Retorne SOMENTE o JSON, nada mais.`;
         key: 'bt_carca',
         label: 'BT-Carcaça',
         min: 300
-      }];
-      isoFields.forEach(({
+      }].forEach(({
         key,
         label,
         min
       }) => {
-        const vMed = parseFloat(valores[pk(key)]);
-        if (!isNaN(vMed) && vMed > 0) {
-          const vCorr = vMed / fatorK;
-          const tempInfo = isNaN(tempIso) ? '' : ` (medido ${vMed.toFixed(0)} MΩ a ${tempIso}°C, corrigido para 20°C)`;
-          if (vCorr < min) {
-            linhas.push(`❌ ${eqLabel} — Isolação ${label}: ${vCorr.toFixed(0)} MΩ${tempInfo} abaixo do mínimo (${min} MΩ a 20°C — IEC 60076-3/NBR 5356-3)`);
-          } else {
-            linhas.push(`✅ ${eqLabel} — Isolação ${label}: ${vCorr.toFixed(0)} MΩ${tempInfo} (≥${min} MΩ a 20°C)`);
-          }
+        const vM = parseFloat(valores[pk(key)]);
+        if (!isNaN(vM) && vM > 0) {
+          const vC = vM / fK;
+          const tInfo = isNaN(tempIso) ? '' : ' (' + vM.toFixed(0) + ' MΩ a ' + tempIso + '°C → ' + vC.toFixed(0) + ' MΩ a 20°C)';
+          linhas.push(vC < min ? '❌ ' + eqLabel + ' — Isolação ' + label + ': ' + vC.toFixed(0) + ' MΩ' + tInfo + ' < ' + min + ' MΩ (IEC 60076-3)' : '✅ ' + eqLabel + ' — Isolação ' + label + ': ' + vC.toFixed(0) + ' MΩ' + tInfo + ' ≥ ' + min + ' MΩ OK');
         }
       });
-
-      // ── Observações manuais do equipamento ──────────────────────────────────
-      const obsEq = obsMap[`${eq.equipId}-${ei}`];
-      if (obsEq && obsEq.trim()) {
-        linhas.push(`📝 ${eqLabel}: ${obsEq.trim()}`);
-      }
+      const obsEq = obsMap[eq.equipId + '-' + ei];
+      if (obsEq && obsEq.trim()) linhas.push('📝 ' + eqLabel + ': ' + obsEq.trim());
     });
     return linhas.filter(Boolean).join('\n');
   }
@@ -1434,14 +1365,14 @@ Retorne SOMENTE o JSON, nada mais.`;
       fontSize: 11,
       marginTop: 8
     }
-  }, "Preencha: tipo, ART, respons\xE1vel e local"), servicosSalvos.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
+  }, "Preencha: tipo, ART, respons\xE1vel e local"), servicosSalvos.length > 0 && /*#__PURE__*/React.createElement(React.Fragment, null, /*#__PURE__*/React.createElement("input", {
     ref: fileInputRef,
     type: "file",
     accept: ".json",
     style: {
       display: "none"
     },
-    onInput: ev => {
+    onChange: ev => {
       const f = ev.target.files && ev.target.files[0];
       if (!f) return;
       const fr = new FileReader();
@@ -1461,13 +1392,13 @@ Retorne SOMENTE o JSON, nada mais.`;
             id
           };
           const lista = JSON.parse(localStorage.getItem('nep-servicos') || '[]');
-          const idx2 = lista.findIndex(x => x.id === id);
-          if (idx2 >= 0) lista[idx2] = snap;else lista.unshift(snap);
+          const idx = lista.findIndex(x => x.id === id);
+          if (idx >= 0) lista[idx] = snap;else lista.unshift(snap);
           localStorage.setItem('nep-servicos', JSON.stringify(lista));
           setServicosSalvos(lista);
           setTela('ensaios');
         } catch (err) {
-          alert('Erro ao carregar arquivo: ' + err.message);
+          alert('Erro: ' + err.message);
         }
       };
       fr.readAsText(f);
@@ -1490,7 +1421,7 @@ Retorne SOMENTE o JSON, nada mais.`;
       marginBottom: 8,
       display: "block"
     }
-  }, "\uD83D\uDCC2 CARREGAR SERVI\xC7O SALVO (.json)")), /*#__PURE__*/React.createElement("button", {
+  }, "\uD83D\uDCC2 CARREGAR SERVI\xC7O SALVO (.json)"), /*#__PURE__*/React.createElement("button", {
     onClick: () => setShowServicos(true),
     style: {
       width: "100%",
@@ -2510,7 +2441,7 @@ Retorne SOMENTE o JSON, nada mais.`;
       pointerEvents: "none",
       whiteSpace: "nowrap"
     }
-  }, "salvo as ", autoSalvoEm), showAddEquip && /*#__PURE__*/React.createElement("div", {
+  }, "\u2713 salvo \xE0s ", autoSalvoEm), showAddEquip && /*#__PURE__*/React.createElement("div", {
     style: {
       position: "fixed",
       inset: 0,
