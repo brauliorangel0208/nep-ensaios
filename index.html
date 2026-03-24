@@ -595,31 +595,43 @@ Retorne SOMENTE o JSON, nada mais.`;
         {!pronto&&<div style={{textAlign:"center",color:TX2,fontSize:11,marginTop:8}}>Preencha: tipo, ART, responsável e local</div>}
         {servicosSalvos.length>0&&(
           <React.Fragment><React.Fragment>
-          <input ref={fileInputRef} type="file" accept=".json" style={{display:"none"}} onChange={ev=>{
-            const f=ev.target.files&&ev.target.files[0]; if(!f)return;
-            const fr=new FileReader();
-            fr.onload=e=>{try{
-              const s=JSON.parse(e.target.result);
-              if(s.dados)setDados(s.dados);
-              if(s.equipamentos)setEquipamentos(s.equipamentos);
-              if(s.valores)setValores(s.valores);
-              if(s.checks)setChecks(s.checks);
-              if(s.obsMap)setObsMap(s.obsMap);
-              if(s.acoesRecomendadas)setAcoesRecomendadas(s.acoesRecomendadas);
-              if(s.placas)setPlacas(s.placas);
-              const id=(s.dados&&(s.dados.art||s.dados.local))||f.name;
-              const snap={...s,id};
-              const lista=JSON.parse(localStorage.getItem('nep-servicos')||'[]');
-              const idx=lista.findIndex(x=>x.id===id);
-              if(idx>=0)lista[idx]=snap;else lista.unshift(snap);
-              localStorage.setItem('nep-servicos',JSON.stringify(lista));
-              setServicosSalvos(lista);
-              setTela('ensaios');
-            }catch(err){alert('Erro: '+err.message);}};
-            fr.readAsText(f);
-            ev.target.value='';
-          }}/>
-          <button onClick={()=>fileInputRef.current&&fileInputRef.current.click()} style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".json"
+            style={{display:"none"}}
+            onInput={ev=>{
+              const f=ev.target.files&&ev.target.files[0];
+              if(!f)return;
+              const fr=new FileReader();
+              fr.onload=e=>{
+                try{
+                  const s=JSON.parse(e.target.result);
+                  if(s.dados)setDados(s.dados);
+                  if(s.equipamentos)setEquipamentos(s.equipamentos);
+                  if(s.valores)setValores(s.valores);
+                  if(s.checks)setChecks(s.checks);
+                  if(s.obsMap)setObsMap(s.obsMap);
+                  if(s.acoesRecomendadas)setAcoesRecomendadas(s.acoesRecomendadas);
+                  if(s.placas)setPlacas(s.placas);
+                  const id=(s.dados&&(s.dados.art||s.dados.local))||f.name;
+                  const snap={...s,id};
+                  const lista=JSON.parse(localStorage.getItem('nep-servicos')||'[]');
+                  const idx2=lista.findIndex(x=>x.id===id);
+                  if(idx2>=0)lista[idx2]=snap;else lista.unshift(snap);
+                  localStorage.setItem('nep-servicos',JSON.stringify(lista));
+                  setServicosSalvos(lista);
+                  setTela('ensaios');
+                }catch(err){alert('Erro ao carregar arquivo: '+err.message);}
+              };
+              fr.readAsText(f);
+              ev.target.value='';
+            }}
+          />
+          <button
+            onClick={()=>{if(fileInputRef.current)fileInputRef.current.click();}}
+            style={{width:"100%",padding:14,background:"#0a2a1a",border:"1px solid #22C55E",borderRadius:10,color:"#22C55E",fontSize:14,fontWeight:700,cursor:"pointer",marginBottom:8,display:"block"}}
+          >
             📂 CARREGAR SERVIÇO SALVO (.json)
           </button>
         </React.Fragment><button onClick={()=>setShowServicos(true)}
